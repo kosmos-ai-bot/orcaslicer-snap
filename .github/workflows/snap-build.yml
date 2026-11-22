@@ -127,7 +127,8 @@ jobs:
           shopt -s nullglob
           for f in ~/.local/state/snapcraft/log/*.log /tmp/snapcraft-*.log; do
             echo "::group::${f##*/} (last 150 lines)"
-            tail -n 150 "$f"
+            # A log that cannot be read must not turn this step red as well.
+            tail -n 150 "$f" || true
             echo "::endgroup::"
           done
 
