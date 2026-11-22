@@ -213,6 +213,26 @@ parts:
           deps/OpenCV/OpenCV.cmake
       fi
 
+      # The bundled CPython is configured by upstream with
+      # --enable-optimizations, and with CC=clang that turns its build into a
+      # PGO pipeline: an instrumented build, a run of the test suite to collect
+      # profile data, then a second build against it. In this confined build
+      # that pipeline never converges - the job log shows two full instrumented
+      # builds and then a failure - and it needs llvm-profdata plus a working
+      # test run to produce profile data at all. The interpreter ships only to
+      # run OrcaSlicer's plugin and firmware-download helpers, where PGO buys a
+      # few percent at best, so build it plain and keep the dep deterministic.
+      if [ -f deps/python3/python3.cmake ]; then
+        # Range-limited to the Linux branch; the two macOS ones never run here.
+        sed -i -e '/^    set(_conf_cmd \.\/configure$/,/^    )$/ s|^\(\s*\)--enable-optimizations$|\1# --enable-optimizations  # dropped: see snapcraft.yaml|' \
+          deps/python3/python3.cmake
+        if awk '/^    set\(_conf_cmd \.\/configure$/,/^    \)$/' deps/python3/python3.cmake \
+           | grep -qE '^[[:space:]]*--enable-optimizations'; then
+          echo "error: could not drop --enable-optimizations from deps/python3" >&2
+          exit 1
+        fi
+      fi
+
       # Build dependencies first (as configured upstream)
       cd deps
 
@@ -238,7 +258,14 @@ parts:
         -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld \
         -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld \
         -G Ninja
-      ninja -j1
+      # The deps build prints megabytes of compiler command lines, and when a
+      # part fails snapcraft prints only a truncated copy of that output: the
+      # real error sits past the truncation point and is lost. Tee it to a file
+      # under the /tmp name the workflow's failure step already collects, so
+      # the tail of the real log reaches the public job log.
+      if ! ninja -j1 2>&1 | tee /tmp/snapcraft-deps-build.log; then
+        exit 1
+      fi
       cd ..
 
       # Build OrcaSlicer using an out-of-source build directory (_build).
