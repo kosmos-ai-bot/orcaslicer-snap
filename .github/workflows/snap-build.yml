@@ -115,6 +115,22 @@ jobs:
             ~/.local/state/snapcraft/log/*.log
             /tmp/snapcraft-*.log
 
+      - name: Show build log on failure
+        # The snapcraft logs are uploaded as an artifact as well, but those can
+        # only be downloaded with repo access. Echoing the tail into the job
+        # output keeps every failed run diagnosable from the public log, and
+        # the runner's size explains the parallelism (deps build one at a
+        # time, each with nproc jobs).
+        if: failure()
+        run: |
+          echo "runner: $(nproc) cpus, $(free -g | awk '/^Mem:/ {print $2}') GiB RAM"
+          shopt -s nullglob
+          for f in ~/.local/state/snapcraft/log/*.log /tmp/snapcraft-*.log; do
+            echo "::group::${f##*/} (last 150 lines)"
+            tail -n 150 "$f"
+            echo "::endgroup::"
+          done
+
   test-snap:
     name: Test Snap
     needs: build-snap
