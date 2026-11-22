@@ -110,6 +110,14 @@ parts:
       # enabled, and its configure dies when nasm/yasm is missing:
       #   "nasm/yasm not found or too old. Use --disable-x86asm for a crippled build."
       - nasm
+      # The bundled CPython is built with --enable-optimizations, and its PGO
+      # step needs llvm-profdata when CC is clang, which the build environment
+      # exports. Without it that dep dies at configure time with
+      #   "llvm-profdata is required for a --enable-optimizations build".
+      # The `llvm` metapackage is the one that ships /usr/bin/llvm-profdata,
+      # matching the clang 18 that `clang` installs; llvm-18 alone only
+      # provides the versioned name, which configure does not look for.
+      - llvm
 
     stage-packages:
       - xdg-utils
@@ -177,6 +185,12 @@ parts:
 
       unset LD_LIBRARY_PATH
       cp -a "${CRAFT_PART_SRC}"/* "${CRAFT_PART_BUILD}"
+
+      # CPython's PGO step looks the profile tool up under its unversioned
+      # name. The llvm package provides it that way; if an image ever ships
+      # only the versioned binary, link it here rather than fail the whole
+      # build 20 minutes in with "llvm-profdata ... could not be found".
+      command -v llvm-profdata >/dev/null 2>&1 || ln -sfn /usr/lib/llvm-18/bin/llvm-profdata /usr/local/bin/llvm-profdata
 
       # OrcaSlicer 2.5.0 and 2.5.1 pin wxWidgets to commit b44c39c of
       # OrcaSlicer/Orca-deps-wxWidgets with GIT_SHALLOW ON, and a --depth 1
